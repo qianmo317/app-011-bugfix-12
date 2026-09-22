@@ -84,6 +84,8 @@ export const useStore = create<AppState>((set, get) => ({
               ...p,
               rooms: p.rooms.filter((r) => r.id !== roomId),
               openings: p.openings.filter((o) => o.roomId !== roomId),
+              // 点位挂在 wallKey(`${roomId}-${wallIndex}`) 上，删房间一并清除
+              outlets: p.outlets.filter((o) => !o.wallKey.startsWith(`${roomId}-`)),
             }
           : p
       ),
