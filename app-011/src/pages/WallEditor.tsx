@@ -15,34 +15,52 @@ export default function WallEditor() {
   const [heightMm, setHeightMm] = useState('300');
   const [kind, setKind] = useState<Outlet['kind']>('socket');
   const [circuit, setCircuit] = useState('');
+  const [error, setError] = useState('');
 
   const selectedRoom = plan?.rooms.find((r) => r.id === roomId);
   const wallSegs = selectedRoom ? getWallSegments(selectedRoom) : [];
-  const wallKey = selectedRoom ? `${selectedRoom.id}-${wallIndex}` : '';
+  const wallIdx = Math.min(Math.max(parseInt(wallIndex) || 0, 0), Math.max(wallSegs.length - 1, 0));
+  const selectedWall = wallSegs[wallIdx];
+  const wallKey = selectedRoom ? `${selectedRoom.id}-${wallIdx}` : '';
 
   const handleAdd = () => {
-    if (!plan || !wallKey) return;
+    if (!plan || !selectedRoom || !selectedWall) return;
+    const xValue = Number(xMm);
+    const heightValue = Number(heightMm);
+    if (xMm.trim() === '' || heightMm.trim() === '' || !Number.isFinite(xValue) || !Number.isFinite(heightValue)) {
+      setError('距墙左端和距地高度必须填写数字');
+      return;
+    }
+    if (xValue < 0 || xValue > selectedWall.lengthMm) {
+      setError(`距墙左端需在 0 ~ ${Math.round(selectedWall.lengthMm)}mm 之间`);
+      return;
+    }
+    if (heightValue < 0 || heightValue > selectedRoom.heightMm) {
+      setError(`距地高度需在 0 ~ ${selectedRoom.heightMm}mm 之间`);
+      return;
+    }
     const outlet: Outlet = {
       id: Math.random().toString(36).slice(2),
       wallKey,
-      xMm: parseInt(xMm) || 0,
-      heightMm: parseInt(heightMm) || 0,
+      xMm: xValue,
+      heightMm: heightValue,
       kind,
       circuit: circuit || undefined,
     };
     addOutlet(plan.id, outlet);
+    setError('');
   };
 
   const wallOutlets = plan?.outlets.filter((o) => o.wallKey === wallKey) || [];
-  const allOutlets = plan?.outlets || [];
 
-  const planOutlets = useStore.getState().plans.flatMap((p) => p.outlets);
+  const roomWallKeys = new Set(wallSegs.map((_, i) => `${selectedRoom?.id}-${i}`));
+  const roomOutlets = plan?.outlets.filter((o) => roomWallKeys.has(o.wallKey)) || [];
   const outletCounts = {
-    socket: planOutlets.filter((o) => o.kind === 'socket').length,
-    switch: planOutlets.filter((o) => o.kind === 'switch').length,
-    net: planOutlets.filter((o) => o.kind === 'net').length,
-    light: planOutlets.filter((o) => o.kind === 'light').length,
-    water: planOutlets.filter((o) => o.kind === 'water').length,
+    socket: roomOutlets.filter((o) => o.kind === 'socket').length,
+    switch: roomOutlets.filter((o) => o.kind === 'switch').length,
+    net: roomOutlets.filter((o) => o.kind === 'net').length,
+    light: roomOutlets.filter((o) => o.kind === 'light').length,
+    water: roomOutlets.filter((o) => o.kind === 'water').length,
   };
 
   if (!plan) {
@@ -69,12 +87,16 @@ export default function WallEditor() {
       </div>
 
       <div className="info-bar">
+        <span>当前房间: <strong>{selectedRoom ? selectedRoom.name : '未选择'}</strong></span>
         <span>插座: <strong>{outletCounts.socket}</strong></span>
         <span>开关: <strong>{outletCounts.switch}</strong></span>
         <span>网口: <strong>{outletCounts.net}</strong></span>
         <span>灯位: <strong>{outletCounts.light}</strong></span>
         <span>水口: <strong>{outletCounts.water}</strong></span>
-        <span>合计: <strong>{allOutlets.length}</strong></span>
+        <span>本房间合计: <strong>{roomOutlets.length}</strong></span>
+        {selectedRoom && (
+          <span>本墙(墙{wallIdx + 1}): <strong>{wallOutlets.length}</strong></span>
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: 16 }}>
@@ -83,7 +105,14 @@ export default function WallEditor() {
             <h3 style={{ marginBottom: 12, fontSize: 16 }}>添加点位</h3>
             <div className="form-group">
               <label>房间</label>
-              <select value={roomId} onChange={(e) => setRoomId(e.target.value)}>
+              <select
+                value={roomId}
+                onChange={(e) => {
+                  setRoomId(e.target.value);
+                  setWallIndex('0');
+                  setError('');
+                }}
+              >
                 <option value="">选择房间</option>
                 {plan.rooms.map((r) => (
                   <option key={r.id} value={r.id}>
@@ -97,7 +126,7 @@ export default function WallEditor() {
               <>
                 <div className="form-group">
                   <label>墙面</label>
-                  <select value={wallIndex} onChange={(e) => setWallIndex(e.target.value)}>
+                  <select value={String(wallIdx)} onChange={(e) => setWallIndex(e.target.value)}>
                     {wallSegs.map((s, i) => (
                       <option key={i} value={i}>
                         墙{i + 1} ({formatMm(s.lengthMm)})
@@ -133,6 +162,7 @@ export default function WallEditor() {
                 <button className="btn btn-primary" onClick={handleAdd} style={{ width: '100%' }}>
                   添加点位
                 </button>
+                {error && <div style={{ color: '#e74c3c', fontSize: 13, marginTop: 8 }}>{error}</div>}
               </>
             )}
           </div>

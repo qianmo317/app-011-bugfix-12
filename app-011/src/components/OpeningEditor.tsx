@@ -17,16 +17,52 @@ export default function OpeningEditor({ planId, rooms, openings }: Props) {
   const [widthMm, setWidthMm] = useState('900');
   const [heightMm, setHeightMm] = useState('2100');
   const [type, setType] = useState<Opening['type']>('door');
+  const [error, setError] = useState('');
 
   const selectedRoom = rooms.find((r) => r.id === roomId);
   const wallSegs = selectedRoom ? getWallSegments(selectedRoom) : [];
+  const wallIdx = Math.min(Math.max(parseInt(wallIndex) || 0, 0), Math.max(wallSegs.length - 1, 0));
+  const selectedWall = wallSegs[wallIdx];
 
   const handleAdd = () => {
-    if (!roomId || !selectedRoom) return;
+    if (!roomId || !selectedRoom || !selectedWall) return;
+    const offsetValue = Number(offsetMm);
     const widthValue = Number(widthMm);
     const heightValue = Number(heightMm);
-    const offsetValue = Number(offsetMm);
+    if (
+      offsetMm.trim() === '' ||
+      widthMm.trim() === '' ||
+      heightMm.trim() === '' ||
+      !Number.isFinite(offsetValue) ||
+      !Number.isFinite(widthValue) ||
+      !Number.isFinite(heightValue)
+    ) {
+      setError('偏移和宽高必须填写数字');
+      return;
+    }
+    if (offsetValue < 0 || widthValue <= 0 || heightValue <= 0) {
+      setError('偏移不能为负，宽度和高度必须大于 0');
+      return;
+    }
+    if (offsetValue + widthValue > selectedWall.lengthMm) {
+      setError(`洞口超出墙面范围：偏移+宽度不能超过墙长 ${Math.round(selectedWall.lengthMm)}mm`);
+      return;
+    }
+    if (heightValue > selectedRoom.heightMm) {
+      setError(`洞口高度不能超过层高 ${selectedRoom.heightMm}mm`);
+      return;
+    }
+    const op: Opening = {
+      id: Math.random().toString(36).slice(2),
+      roomId,
+      wallIndex: wallIdx,
+      offsetMm: offsetValue,
+      widthMm: widthValue,
+      heightMm: heightValue,
+      type,
+    };
     addOpening(planId, op);
+    setError('');
   };
 
   const roomOpenings = openings.filter((o) => o.roomId === roomId);
@@ -40,9 +76,9 @@ export default function OpeningEditor({ planId, rooms, openings }: Props) {
         <select
           value={roomId}
           onChange={(e) => {
-            const nextRoomId = e.target.value;
-            wallIndex;
-            setRoomId(nextRoomId);
+            setRoomId(e.target.value);
+            setWallIndex('0');
+            setError('');
           }}
         >
           <option value="">请选择房间</option>
@@ -58,7 +94,7 @@ export default function OpeningEditor({ planId, rooms, openings }: Props) {
         <>
           <div className="form-group">
             <label>墙体 ({wallSegs.length}面)</label>
-            <select value={wallIndex} onChange={(e) => setWallIndex(e.target.value)}>
+            <select value={String(wallIdx)} onChange={(e) => setWallIndex(e.target.value)}>
               {wallSegs.map((s, i) => (
                 <option key={i} value={i}>
                   墙{i + 1} ({s.lengthMm.toFixed(0)}mm)
@@ -93,6 +129,7 @@ export default function OpeningEditor({ planId, rooms, openings }: Props) {
           <button className="btn btn-primary" onClick={handleAdd} style={{ width: '100%' }}>
             添加洞口
           </button>
+          {error && <div style={{ color: '#e74c3c', fontSize: 13, marginTop: 8 }}>{error}</div>}
         </>
       )}
 
